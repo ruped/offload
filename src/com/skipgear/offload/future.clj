@@ -107,7 +107,7 @@
 
 (defn object-stream-pool
   [{:keys [host instances] :as config}]
-  (let [q (java.util.concurrent.ArrayBlockingQueue. instances)]
+  (let [q (java.util.concurrent.ArrayBlockingQueue. instances true)]
     (dotimes [i instances]
       (.put q (object-stream-shell config)))
     (fn pool-getter []
