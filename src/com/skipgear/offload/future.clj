@@ -84,6 +84,7 @@
                      (stream-runner/push-file-once (jar-name) host (jar-name)))
                    (let [command (filter some?
                                          ["java"
+                                          "-XX:+ExitOnOutOfMemoryError"
                                           (when xmx (str "-Xmx" xmx))
                                           "-cp"
                                           (jar-name)
@@ -119,6 +120,14 @@
                  (release healthy?)
                  (.put q shell)))))))
 
+(defn healthy-result?
+  [{:keys [result]}]
+  (try (not (and (some? result)
+                 (instance? Throwable result)
+                 (some? (.getCause ^Throwable result))
+                 (instance? java.lang.OutOfMemoryError (.getCause ^Throwable result))))
+       (catch Exception e true)))
+
 (defn object-stream
   [{:keys [host object-stream-shell]
     :as config} ns fx]
@@ -133,7 +142,8 @@
                               {:result (.readObject @is)}
                               (catch Exception e
                                 {:exception e})))]
-                      (release (nil? exception))
+                      (release (and (nil? exception)
+                                    (healthy-result? result)))
                       (if exception
                         (throw exception)
                         result)))]
