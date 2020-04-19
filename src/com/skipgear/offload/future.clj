@@ -93,6 +93,8 @@
                                    (filter
                                     some?
                                     ["ssh"
+                                     "-o" "StrictHostKeyChecking=no"
+                                     "-o" "UserKnownHostsFile=/dev/null"
                                      (when port "-p") port
                                      (when identity-file "-i") identity-file
                                      (str (when (not (str/blank? user))

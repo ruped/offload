@@ -14,9 +14,12 @@
 
 (defn push-file
   [local-path remote-host remote-path & [{:keys [port user identity-file] :as props}]]
-  (log/info (str "Push File size: " (.length (jio/file local-path))))
-  (let [command (filter some?
+  (log/info (str "Push File size*: " (.length (jio/file local-path))))
+  (let [command (filter
+                 some?
                  ["scp"
+                  "-o" "StrictHostKeyChecking=no"
+                  "-o" "UserKnownHostsFile=/dev/null"
                   (when port "-P") port
                   (when identity-file "-i") identity-file
                   local-path
