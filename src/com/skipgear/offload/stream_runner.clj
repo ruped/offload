@@ -13,15 +13,22 @@
 (defn eg1 [] (str "[ABC" (+ 123 234) "DEF]"))
 
 (defn push-file
-  [local-path remote-host remote-path]
-  (log/info (str "File size: " (.length (jio/file local-path))))
-  (let [{:keys [exit out err]}
-        (sh/sh
-         "scp" local-path
-         (str remote-host ":"remote-path)
-         :out-enc "UTF-8")]
+  [local-path remote-host remote-path & [{:keys [port user identity-file] :as props}]]
+  (log/info (str "Push File size: " (.length (jio/file local-path))))
+  (let [command (filter some?
+                 ["scp"
+                  (when port "-P") port
+                  (when identity-file "-i") identity-file
+                  local-path
+                  (str (when (not (str/blank? user))
+                         (str user "@"))
+                       remote-host ":"remote-path)])
+        {:keys [exit out err]} (apply sh/sh command)]
     (when-not (zero? exit)
-      (throw (Exception. "Call-Remote - non zero exit")))))
+      (throw (Exception. (str "Call-Remote - non zero exit (" exit ")\n"
+                              "COMMAND:" command "\n"
+                              "OUT: " out "\n"
+                              "ERR: " err))))))
 
 (def push-file-once (memoize push-file))
 
