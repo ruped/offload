@@ -66,14 +66,14 @@
     (log/info (jar-name) " Size: " (.length (jio/file (jar-name))))
     (.deleteOnExit (jio/file (jar-name)))
     ;;Push file to server
-    (stream-runner/push-file-once (jar-name) host (jar-name))
+    (stream-runner/push-file-once (jar-name) host (jar-name) config)
     (stream-runner/call-remote {:classpath (jar-name)
                                 :host host
                                 :fx fx
                                 :ns ns})))
 
 (defn object-stream-shell
-  [{:keys [host xmx envs] :as config}]
+  [{:keys [host xmx envs user port identity-file] :as config}]
   (let [create (fn []
                  (locking jar-name
                    (jar/cached-make-uber-jar (jar-name))
@@ -81,7 +81,7 @@
                    (.deleteOnExit (jio/file (jar-name)))
                    ;;Push file to server
                    (when host
-                     (stream-runner/push-file-once (jar-name) host (jar-name)))
+                     (stream-runner/push-file-once (jar-name) host (jar-name) config))
                    (let [command (filter some?
                                          ["java"
                                           "-XX:+ExitOnOutOfMemoryError"
@@ -90,11 +90,18 @@
                                           (jar-name)
                                           "com.skipgear.offload.stream_runner" "object"])
                          command (if host
-                                   ["ssh" host
-                                    (str/join " "
-                                              (concat (map (fn [[k v]]
-                                                             (str (name k) "="v)) envs)
-                                                      command))]
+                                   (filter
+                                    some?
+                                    ["ssh"
+                                     (when port "-p") port
+                                     (when identity-file "-i") identity-file
+                                     (str (when (not (str/blank? user))
+                                            (str user "@"))
+                                          host)
+                                     (str/join " "
+                                               (concat (map (fn [[k v]]
+                                                              (str (name k) "="v)) envs)
+                                                       command))])
                                    command)]
                      (stream-runner/object-stream-shell command {:env envs}))))
         at (atom (create))]
