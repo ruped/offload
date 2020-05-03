@@ -5,6 +5,7 @@
             [clojure.java.io :as jio]
             [clojure.string :as str]
             [taoensso.timbre :as log]
+            [clojure.set :as set]
             [com.skipgear.offload.stream-runner :as stream-runner]))
 
 (def ^:dynamic *instance-identity*
@@ -73,7 +74,7 @@
                                 :ns ns})))
 
 (defn object-stream-shell
-  [{:keys [host xmx envs user port identity-file] :as config}]
+  [{:keys [host xmx envs user port identity-file compress] :as config}]
   (let [create (fn []
                  (locking jar-name
                    (jar/cached-make-uber-jar (jar-name))
@@ -93,6 +94,7 @@
                                    (filter
                                     some?
                                     ["ssh"
+                                     (when-not (false? compress) "-C")
                                      "-o" "StrictHostKeyChecking=no"
                                      "-o" "UserKnownHostsFile=/dev/null"
                                      (when port "-p") port
@@ -116,10 +118,12 @@
                    (reset! at (create)))))))))
 
 (defn object-stream-pool
-  [{:keys [host instances] :as config}]
-  (let [q (java.util.concurrent.ArrayBlockingQueue. instances true)]
-    (dotimes [i instances]
-      (.put q (object-stream-shell config)))
+  [configs]
+  (let [q (java.util.concurrent.ArrayBlockingQueue.
+           (apply + (map (comp #(or % 1) :instances) configs)) true)]
+    (doseq [{:keys [instances] :as config} configs]
+      (dotimes [i instances]
+        (.put q (object-stream-shell config))))
     (fn pool-getter []
       (let [shell (.take q)
             {:keys [os is proc release] :as x} (shell)]
@@ -129,13 +133,21 @@
                  (release healthy?)
                  (.put q shell)))))))
 
+(defn stack-types
+  [^Throwable throwable]
+  (when throwable
+    (cons throwable (stack-types (.getCause throwable)))))
+
+;;(map type (stack-types (java.lang.RuntimeException. "B" (java.io.IOException. "ABC" (java.lang.OutOfMemoryError. "FIRST")))))
+
 (defn healthy-result?
   [{:keys [result]}]
   (try (not (and (some? result)
                  (instance? Throwable result)
-                 (some? (.getCause ^Throwable result))
-                 (instance? java.lang.OutOfMemoryError (.getCause ^Throwable result))))
-       (catch Exception e true)))
+                 (some #(instance? java.lang.OutOfMemoryError %) (stack-types result) )))
+       (catch Throwable e true)))
+
+;;(healthy-result? {:result (java.lang.RuntimeException. "B" (java.io.IOException. "ABC" (java.lang.OutOfMemoryError. "FIRST")))})
 
 (defn object-stream
   [{:keys [host object-stream-shell]
@@ -149,7 +161,7 @@
                               (.writeObject os {:ns ns :fx fx})
                               (.flush os)
                               {:result (.readObject @is)}
-                              (catch Exception e
+                              (catch Throwable e
                                 {:exception e})))]
                       (release (and (nil? exception)
                                     (healthy-result? result)))
@@ -157,7 +169,7 @@
                         (throw exception)
                         result)))]
       (try (attempt)
-           (catch Exception e (attempt))))))
+           (catch Throwable e (attempt))))))
 
 (def ^:dynamic *engine* in-process)
 (def ^:dynamic *opts* {})

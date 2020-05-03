@@ -1,4 +1,4 @@
-(defproject com.skipgear/offload "0.1.7"
+(defproject com.skipgear/offload "0.1.10"
   :description "Library to provide alternative ways to share/distribute application workloads."
   :url "https://skipgear.com"
   :license {:name "Eclipse Public License"
