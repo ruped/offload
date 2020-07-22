@@ -73,12 +73,15 @@
                                 :fx fx
                                 :ns ns})))
 
+(def deployments (atom {}))
+
 (defn object-stream-shell
   [{:keys [host xmx envs user port identity-file compress] :as config}]
   (let [create (fn []
-                 (locking jar-name
-                   (jar/cached-make-uber-jar (jar-name))
-                   (log/info (jar-name) " Size: " (.length (jio/file (jar-name))))
+                 (locking (.intern (or host ""))
+                   (locking jar-name (jar/cached-make-uber-jar (jar-name)))
+                   (swap! deployments update host (fn[x] (inc (or x 0))))
+                   (log/info host " " (@deployments host) ":" (jar-name) " Size: " (.length (jio/file (jar-name))))
                    (.deleteOnExit (jio/file (jar-name)))
                    ;;Push file to server
                    (when host
@@ -121,9 +124,9 @@
   [configs]
   (let [q (java.util.concurrent.ArrayBlockingQueue.
            (apply + (map (comp #(or % 1) :instances) configs)) true)]
-    (doseq [{:keys [instances] :as config} configs]
-      (dotimes [i instances]
-        (.put q (object-stream-shell config))))
+    (doall (pmap (fn [{:keys [instances] :as config}]
+                   (dotimes [i instances]
+                     (.put q (object-stream-shell config)))) configs))
     (fn pool-getter []
       (let [shell (.take q)
             {:keys [os is proc release] :as x} (shell)]
