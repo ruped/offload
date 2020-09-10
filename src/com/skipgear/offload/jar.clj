@@ -84,7 +84,11 @@
 
 (defn make-uber-jar
   [uber-jar-path]
-  (let [non-jdk-classpath (remove (comp #(s/includes? % "/openjdk") #(.getAbsolutePath %)) (cp/classpath))]
+  (let [non-jdk-classpath (remove (comp
+                                   #(or (clojure.string/includes? % "-openjdk-")
+                                        (clojure.string/includes? % "/openjdk"))
+                                   #(.getAbsolutePath %))
+                                  (cp/classpath))]
     (if (and (empty? (cp/classpath-directories))
              (= 1 (count non-jdk-classpath)))
       (do
